@@ -227,7 +227,7 @@ async function main() {
             }
         });
 
-        app.get('/orders', async (req, res) => {
+        app.get('/orders', verifyToken, async (req, res) => {
             try {
                 const orders = await db.collection('orders').find().toArray();
                 res.json(orders);
@@ -237,7 +237,7 @@ async function main() {
             }
         });
 
-        app.get('/orders/:id', verifyToken, async (req, res) => {
+        app.get('/orders/:id', async (req, res) => {
             try {
                 const orderId = req.params.id;
 
