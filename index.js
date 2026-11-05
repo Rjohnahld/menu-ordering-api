@@ -17,7 +17,15 @@ async function main() {
         console.log('Connected to MongoDB');
         // Add your route code here
 
-        app.get("/menu")
+        app.get("/menu", async (req,res) => {
+            try {
+                const items = await db.collection("menu").find().project({_id: 0}).toArray();
+                res.json(items);
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ error: "Failed to fetch menu" });
+            }
+        })
 
         app.listen(3000, () => {
             console.log("Server started")
