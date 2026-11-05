@@ -375,7 +375,7 @@ async function main() {
             }
         });
 
-        app.post('/users', verifyToken, async function (req, res) {
+        app.post('/users', async function (req, res) {
             try {
                 const { email, password } = req.body;
 
@@ -407,7 +407,7 @@ async function main() {
             }
         });
 
-        app.post('/login', verifyToken, async (req, res) => {
+        app.post('/login', async (req, res) => {
             try {
                 const { email, password } = req.body;
 
