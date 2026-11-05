@@ -16,36 +16,14 @@ async function main() {
     try {
         const db = await connect(mongoUri, dbname);
         console.log('Connected to MongoDB');
-        // Add your route code here
 
         app.get("/menu", async (req, res) => {
             try {
-                const items = await db.collection("menu").find().project({ _id: 0 }).toArray();
+                const items = await db.collection("menu").find().project().toArray();
                 res.json(items);
             } catch (error) {
                 console.error(error);
                 res.status(500).json({ error: "Failed to fetch menu" });
-            }
-        })
-
-        app.get("/menuItem/:id", async (req, res) => {
-            try {
-                const id = req.params.id;
-
-                // First, fetch the recipe
-                const menuItem = await db.collection("menu").findOne(
-                    { _id: new ObjectId(id) },
-                    { projection: { _id: 0 } }
-                );
-
-                if (!menuItem) {
-                    return res.status(404).json({ error: "item not found" });
-                }
-
-                res.json(menuItem);
-            } catch (error) {
-                console.error("Error fetching item:", error);
-                res.status(500).json({ error: "Internal server error" });
             }
         })
 
@@ -71,7 +49,6 @@ async function main() {
                 }
 
                 const items = await db.collection('menu').find(query).project({
-                    _id: 0,
                     name: 1,
                     category: 1,
                     price: 1,
@@ -85,6 +62,28 @@ async function main() {
                 res.status(500).json({ error: 'Internal server error' });
             }
         });
+
+        app.get("/menu/:id", async (req, res) => {
+            try {
+                const id = req.params.id;
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).json({ error: "Invalid menu item id" });
+                }
+
+                const menuItem = await db.collection("menu").findOne(
+                    { _id: new ObjectId(id) }
+                );
+
+                if (!menuItem) {
+                    return res.status(404).json({ error: "item not found" });
+                }
+
+                res.json(menuItem);
+            } catch (error) {
+                console.error("Error fetching item:", error);
+                res.status(500).json({ error: "Internal server error" });
+            }
+        })
 
         app.post('/menu', async (req, res) => {
             try {
