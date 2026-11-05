@@ -129,6 +129,84 @@ async function main() {
             }
         });
 
+        app.put('/menu/:id', async (req, res) => {
+            try {
+                const menuItemId = req.params.id;
+                const { name, category, price, description, tags, ingredients, isAvailable } = req.body;
+
+                if (!ObjectId.isValid(menuItemId)) {
+                    return res.status(400).json({ error: 'Invalid menu item id' });
+                }
+
+                if (!name || !category || price === undefined || !ingredients || !tags) {
+                    return res.status(400).json({ error: 'Missing required fields' });
+                }
+
+                if (typeof price !== 'number' || price < 0) {
+                    return res.status(400).json({ error: 'Price must be a positive number' });
+                }
+
+                if (!Array.isArray(tags) || !Array.isArray(ingredients)) {
+                    return res.status(400).json({ error: 'Tags and ingredients must be arrays' });
+                }
+
+                const duplicate = await db.collection('menu').findOne({
+                    name: name,
+                    _id: { $ne: new ObjectId(menuItemId) }
+                });
+                if (duplicate) {
+                    return res.status(409).json({ error: 'Another menu item already has this name' });
+                }
+
+                const updatedMenuItem = {
+                    name,
+                    category,
+                    price,
+                    description: description || '',
+                    tags,
+                    ingredients,
+                    isAvailable: isAvailable !== undefined ? isAvailable : true
+                };
+
+                const result = await db.collection('menu').replaceOne(
+                    { _id: new ObjectId(menuItemId) },
+                    updatedMenuItem
+                );
+
+                if (result.matchedCount === 0) {
+                    return res.status(404).json({ error: 'Menu item not found' });
+                }
+
+                res.json({
+                    message: 'Menu item updated successfully'
+                });
+            } catch (error) {
+                console.error('Error updating menu item:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.delete('/menu/:id', async (req, res) => {
+            try {
+                const menuItemId = req.params.id;
+
+                if (!ObjectId.isValid(menuItemId)) {
+                    return res.status(400).json({ error: 'Invalid menu item id' });
+                }
+
+                const result = await db.collection('menu').deleteOne({ _id: new ObjectId(menuItemId) });
+
+                if (result.deletedCount === 0) {
+                    return res.status(404).json({ error: 'Menu item not found' });
+                }
+
+                res.json({ message: 'Menu item deleted successfully' });
+            } catch (error) {
+                console.error('Error deleting menu item:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
         app.listen(3000, () => {
             console.log("Server started")
         })
