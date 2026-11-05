@@ -28,7 +28,7 @@ async function main() {
             }
         })
 
-        app.get("/menu/:id", async (req, res) => {
+        app.get("/menuItem/:id", async (req, res) => {
             try {
                 const id = req.params.id;
 
@@ -71,6 +71,7 @@ async function main() {
                 }
 
                 const items = await db.collection('menu').find(query).project({
+                    _id: 0,
                     name: 1,
                     category: 1,
                     price: 1,
