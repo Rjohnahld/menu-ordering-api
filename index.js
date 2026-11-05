@@ -6,7 +6,27 @@ const dbname = "menu-ordering";
 const { connect } = require('./db');
 const { ObjectId } = require('mongodb');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
+const generateAccessToken = (id, email) => {
+    return jwt.sign({
+        'user_id': id,
+        'email': email
+    }, process.env.TOKEN_SECRET, {
+        expiresIn: "1h"
+    });
+}
+
+const verifyToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.sendStatus(403);
+    jwt.verify(token, process.env.TOKEN_SECRET, (err, user) => {
+        if (err) return res.sendStatus(403);
+        req.user = user;
+        next();
+    });
+};
 
 let app = express();
 app.use(cors());
@@ -86,7 +106,7 @@ async function main() {
             }
         })
 
-        app.post('/menu', async (req, res) => {
+        app.post('/menu', verifyToken, async (req, res) => {
             try {
                 const { name, category, price, description, tags, ingredients, isAvailable } = req.body;
 
@@ -129,7 +149,7 @@ async function main() {
             }
         });
 
-        app.put('/menu/:id', async (req, res) => {
+        app.put('/menu/:id', verifyToken, async (req, res) => {
             try {
                 const menuItemId = req.params.id;
                 const { name, category, price, description, tags, ingredients, isAvailable } = req.body;
@@ -186,7 +206,7 @@ async function main() {
             }
         });
 
-        app.delete('/menu/:id', async (req, res) => {
+        app.delete('/menu/:id', verifyToken, async (req, res) => {
             try {
                 const menuItemId = req.params.id;
 
@@ -217,7 +237,7 @@ async function main() {
             }
         });
 
-        app.get('/orders/:id', async (req, res) => {
+        app.get('/orders/:id', verifyToken, async (req, res) => {
             try {
                 const orderId = req.params.id;
 
@@ -304,7 +324,7 @@ async function main() {
             }
         });
 
-        app.patch('/orders/:id/status', async (req, res) => {
+        app.patch('/orders/:id/status', verifyToken, async (req, res) => {
             try {
                 const orderId = req.params.id;
                 const { status } = req.body;
@@ -334,7 +354,7 @@ async function main() {
             }
         });
 
-        app.delete('/orders/:id', async (req, res) => {
+        app.delete('/orders/:id', verifyToken, async (req, res) => {
             try {
                 const orderId = req.params.id;
 
@@ -355,7 +375,7 @@ async function main() {
             }
         });
 
-        app.post('/users', async function (req, res) {
+        app.post('/users', verifyToken, async function (req, res) {
             try {
                 const { email, password } = req.body;
 
@@ -383,6 +403,36 @@ async function main() {
                 });
             } catch (error) {
                 console.error('Error creating user:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.post('/login', verifyToken, async (req, res) => {
+            try {
+                const { email, password } = req.body;
+
+                if (!email || !password) {
+                    return res.status(400).json({ error: 'Email and password are required' });
+                }
+
+                const user = await db.collection('users').findOne({ email: email });
+                if (!user) {
+                    return res.status(401).json({ error: 'Invalid email or password' });
+                }
+
+                const isPasswordValid = await bcrypt.compare(password, user.password);
+                if (!isPasswordValid) {
+                    return res.status(401).json({ error: 'Invalid email or password' });
+                }
+
+                const accessToken = generateAccessToken(user._id, user.email);
+
+                res.json({
+                    message: 'Login successful',
+                    accessToken: accessToken
+                });
+            } catch (error) {
+                console.error('Error logging in:', error);
                 res.status(500).json({ error: 'Internal server error' });
             }
         });
