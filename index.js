@@ -5,6 +5,7 @@ const mongoUri = process.env.MONGO_URI;
 const dbname = "menu-ordering";
 const { connect } = require('./db');
 const { ObjectId } = require('mongodb');
+const bcrypt = require('bcrypt');
 
 
 let app = express();
@@ -350,6 +351,38 @@ async function main() {
                 res.json({ message: 'Order deleted successfully' });
             } catch (error) {
                 console.error('Error deleting order:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.post('/users', async function (req, res) {
+            try {
+                const { email, password } = req.body;
+
+                if (!email || !password) {
+                    return res.status(400).json({ error: 'Email and password are required' });
+                }
+
+                if (!email.includes('@')) {
+                    return res.status(400).json({ error: 'Email must contain @' });
+                }
+
+                const existingUser = await db.collection('users').findOne({ email: email });
+                if (existingUser) {
+                    return res.status(409).json({ error: 'Email is already registered' });
+                }
+
+                const result = await db.collection('users').insertOne({
+                    email: email,
+                    password: await bcrypt.hash(password, 12)
+                });
+
+                res.status(201).json({
+                    message: 'New user account created',
+                    userId: result.insertedId
+                });
+            } catch (error) {
+                console.error('Error creating user:', error);
                 res.status(500).json({ error: 'Internal server error' });
             }
         });
