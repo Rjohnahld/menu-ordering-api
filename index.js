@@ -207,6 +207,154 @@ async function main() {
             }
         });
 
+        app.get('/orders', async (req, res) => {
+            try {
+                const orders = await db.collection('orders').find().toArray();
+                res.json(orders);
+            } catch (error) {
+                console.error('Error fetching orders:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.get('/orders/:id', async (req, res) => {
+            try {
+                const orderId = req.params.id;
+
+                if (!ObjectId.isValid(orderId)) {
+                    return res.status(400).json({ error: 'Invalid order id' });
+                }
+
+                const order = await db.collection('orders').findOne({ _id: new ObjectId(orderId) });
+
+                if (!order) {
+                    return res.status(404).json({ error: 'Order not found' });
+                }
+
+                res.json(order);
+            } catch (error) {
+                console.error('Error fetching order:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.post('/orders', async (req, res) => {
+            try {
+                const { customerName, items, notes } = req.body;
+
+                if (!customerName || !items) {
+                    return res.status(400).json({ error: 'Missing required fields' });
+                }
+
+                if (!Array.isArray(items) || items.length === 0) {
+                    return res.status(400).json({ error: 'Items must be a non-empty array' });
+                }
+
+                for (const item of items) {
+                    if (!ObjectId.isValid(item.menuItemId)) {
+                        return res.status(400).json({ error: `Invalid menu item id: ${item.menuItemId}` });
+                    }
+                    if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+                        return res.status(400).json({ error: 'Quantity must be a whole number of at least 1' });
+                    }
+                }
+
+                const menuIds = items.map(item => new ObjectId(item.menuItemId));
+                const menuDocs = await db.collection('menu').find({ _id: { $in: menuIds } }).toArray();
+
+                const orderItems = [];
+                for (const item of items) {
+                    const menuDoc = menuDocs.find(doc => doc._id.equals(item.menuItemId));
+
+                    if (!menuDoc) {
+                        return res.status(400).json({ error: `Menu item not found: ${item.menuItemId}` });
+                    }
+                    if (!menuDoc.isAvailable) {
+                        return res.status(400).json({ error: `${menuDoc.name} is not available` });
+                    }
+
+                    orderItems.push({
+                        menuItemId: menuDoc._id,
+                        name: menuDoc.name,
+                        price: menuDoc.price,
+                        quantity: item.quantity
+                    });
+                }
+
+                const totalPrice = orderItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+                const newOrder = {
+                    customerName,
+                    items: orderItems,
+                    totalPrice: Math.round(totalPrice * 100) / 100,
+                    status: 'pending',
+                    notes: notes || ''
+                };
+
+                const result = await db.collection('orders').insertOne(newOrder);
+
+                res.status(201).json({
+                    message: 'Order created successfully',
+                    orderId: result.insertedId,
+                    totalPrice: newOrder.totalPrice
+                });
+            } catch (error) {
+                console.error('Error creating order:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.patch('/orders/:id/status', async (req, res) => {
+            try {
+                const orderId = req.params.id;
+                const { status } = req.body;
+                const validStatuses = ['pending', 'preparing', 'ready', 'collected', 'cancelled'];
+
+                if (!ObjectId.isValid(orderId)) {
+                    return res.status(400).json({ error: 'Invalid order id' });
+                }
+
+                if (!validStatuses.includes(status)) {
+                    return res.status(400).json({ error: `Status must be one of: ${validStatuses.join(', ')}` });
+                }
+
+                const result = await db.collection('orders').updateOne(
+                    { _id: new ObjectId(orderId) },
+                    { $set: { status: status } }
+                );
+
+                if (result.matchedCount === 0) {
+                    return res.status(404).json({ error: 'Order not found' });
+                }
+
+                res.json({ message: `Order status updated to ${status}` });
+            } catch (error) {
+                console.error('Error updating order status:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.delete('/orders/:id', async (req, res) => {
+            try {
+                const orderId = req.params.id;
+
+                if (!ObjectId.isValid(orderId)) {
+                    return res.status(400).json({ error: 'Invalid order id' });
+                }
+
+                const result = await db.collection('orders').deleteOne({ _id: new ObjectId(orderId) });
+
+                if (result.deletedCount === 0) {
+                    return res.status(404).json({ error: 'Order not found' });
+                }
+
+                res.json({ message: 'Order deleted successfully' });
+            } catch (error) {
+                console.error('Error deleting order:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
         app.listen(3000, () => {
             console.log("Server started")
         })
