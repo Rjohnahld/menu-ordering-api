@@ -206,10 +206,6 @@ async function main() {
 
                 const newMenuItem = await generateMenuItem(text, categories, tags);
 
-                if (!categories.includes(newMenuItem.category)) {
-                    return res.status(400).json({ error: 'AI could not match a valid category' });
-                }
-
                 const existing = await db.collection('menu').findOne({ name: newMenuItem.name });
                 if (existing) {
                     return res.status(409).json({ error: 'Menu item already exists' });
