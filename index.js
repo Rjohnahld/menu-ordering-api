@@ -5,6 +5,7 @@ const mongoUri = process.env.MONGO_URI;
 const dbname = "menu-ordering";
 const { connect } = require('./db');
 const { ObjectId } = require('mongodb');
+const { generateSearchParams, generateMenuItem } = require("./gemini")
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -84,6 +85,49 @@ async function main() {
             }
         });
 
+        app.get('/menu/ai-search', async (req, res) => {
+            try {
+                const { q } = req.query;
+
+                if (!q) {
+                    return res.status(400).json({ error: 'Search query is required' });
+                }
+
+                const tags = await db.collection('menu').distinct('tags');
+                const categories = await db.collection('menu').distinct('category');
+                const ingredients = await db.collection('menu').distinct('ingredients');
+
+                const searchParams = await generateSearchParams(q, tags, categories, ingredients);
+
+                let query = {};
+
+                if (searchParams.categories.length > 0) {
+                    query.category = { $in: searchParams.categories };
+                }
+
+                if (searchParams.tags.length > 0) {
+                    query.tags = { $in: searchParams.tags };
+                }
+
+                if (searchParams.ingredients.length > 0) {
+                    query.ingredients = { $all: searchParams.ingredients };
+                }
+
+                const items = await db.collection('menu').find(query).project({
+                    name: 1,
+                    category: 1,
+                    price: 1,
+                    tags: 1,
+                    isAvailable: 1
+                }).toArray();
+
+                res.json({ searchParams, items });
+            } catch (error) {
+                console.error('Error with AI search:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
         app.get("/menu/:id", async (req, res) => {
             try {
                 const id = req.params.id;
@@ -145,6 +189,41 @@ async function main() {
                 });
             } catch (error) {
                 console.error('Error creating menu item:', error);
+                res.status(500).json({ error: 'Internal server error' });
+            }
+        });
+
+        app.post('/menu/ai-create', verifyToken, async (req, res) => {
+            try {
+                const { text } = req.body;
+
+                if (!text) {
+                    return res.status(400).json({ error: 'Menu item text is required' });
+                }
+
+                const categories = await db.collection('menu').distinct('category');
+                const tags = await db.collection('menu').distinct('tags');
+
+                const newMenuItem = await generateMenuItem(text, categories, tags);
+
+                if (!categories.includes(newMenuItem.category)) {
+                    return res.status(400).json({ error: 'AI could not match a valid category' });
+                }
+
+                const existing = await db.collection('menu').findOne({ name: newMenuItem.name });
+                if (existing) {
+                    return res.status(409).json({ error: 'Menu item already exists' });
+                }
+
+                const result = await db.collection('menu').insertOne(newMenuItem);
+
+                res.status(201).json({
+                    message: 'Menu item created successfully',
+                    menuItemId: result.insertedId,
+                    menuItem: newMenuItem
+                });
+            } catch (error) {
+                console.error('Error creating menu item with AI:', error);
                 res.status(500).json({ error: 'Internal server error' });
             }
         });
@@ -436,6 +515,7 @@ async function main() {
                 res.status(500).json({ error: 'Internal server error' });
             }
         });
+
 
         app.listen(3000, () => {
             console.log("Server started")
